@@ -12,6 +12,7 @@ import argparse
 from collections import defaultdict
 from pprint import pprint
 from typing import Any, Iterable, TypeVar, cast
+from datetime import datetime
 
 
 T = TypeVar("T")
@@ -25,10 +26,23 @@ parser.add_argument(
     help="objective penalty per machine built",
 )
 parser.add_argument(
+    "--extra-docs", 
+    type=str, 
+    action="append", 
+    default=[],
+    help="Additional Docs-like JSON files to overlay (same schema as Docs.json)"
+)
+parser.add_argument(
     "--conveyor-penalty",
     type=float,
     default=0.0,
     help="objective penalty per conveyor belt of machine input/output",
+)
+parser.add_argument(
+    "--building-multiplier",
+    type=float,
+    default=1.0,
+    help="global speed multiplier for ALL manufacturers (throughput and per-machine power scale linearly)",
 )
 parser.add_argument(
     "--pipeline-penalty",
@@ -98,7 +112,7 @@ parser.add_argument(
     "--resource-multipliers",
     type=str,
     default="",
-    help="comma-separated list of item_class:multiplier to scale resource node availability",
+    help="comma-separated list of item_class:multiplier to scale resource node availability; supports All:<x> as a default",
 )
 parser.add_argument(
     "--num-somersloops-available",
@@ -134,7 +148,7 @@ parser.add_argument(
 parser.add_argument(
     "--xlsx-report",
     type=str,
-    default="Report.xlsx",
+    default="Report",
     help="path to xlsx report output (empty string to disable)",
 )
 parser.add_argument(
@@ -270,8 +284,28 @@ def debug_dump(heading: str, obj: object):
         pprint(obj, stream=debug_file, width=PPRINT_WIDTH, sort_dicts=False)
     print("", file=debug_file)
 
+def _norm_for_xlsx(v):
+    # Accept numbers/strings cleanly
+    if isinstance(v, (int, float, str)) or v is None:
+        return v
+    # Numpy scalars
+    if isinstance(v, (np.integer, np.floating)):
+        return float(v)
+    # Lists/tuples/sets: join nicely
+    if isinstance(v, (list, tuple, set)):
+        return ", ".join(_stringify(x) for x in v)
+    # Dicts: JSON so humans can read it in the cell
+    if isinstance(v, dict):
+        return json.dumps(v, ensure_ascii=False, separators=(",", ":"))
+    # Everything else: string fallback
+    return str(v)
 
+def _stringify(x):
+    if isinstance(x, (np.integer, np.floating)):
+        return str(float(x))
+    return str(x)
 ### Configured clock speeds ###
+
 
 
 def parse_clock_spec(s: str) -> list[Fraction]:
@@ -318,6 +352,7 @@ def parse_resource_multipliers(s: str) -> dict[str, float]:
     if s:
         for token in s.split(","):
             item_class, _, multiplier = token.partition(":")
+            item_class = item_class.strip()
             assert item_class not in result
             result[item_class] = float(multiplier)
     return result
@@ -358,6 +393,8 @@ with open(DOCS_PATH, "r", encoding="utf-16") as f:
     docs_raw = json.load(f)
 
 
+
+
 ### Initial parsing ###
 
 
@@ -367,7 +404,7 @@ native_class_to_class_entries: dict[str, list[dict[str, Any]]] = {}
 NATIVE_CLASS_REGEX = re.compile(r"/Script/CoreUObject.Class'/Script/FactoryGame.(\w+)'")
 
 
-def parse_and_add_fg_entry(fg_entry: dict[str, Any]):
+def parse_and_add_fg_entry(fg_entry: dict[str, Any], merge: bool = False):
     m = NATIVE_CLASS_REGEX.fullmatch(fg_entry["NativeClass"])
     assert m is not None, fg_entry["NativeClass"]
     native_class = m.group(1)
@@ -375,16 +412,24 @@ def parse_and_add_fg_entry(fg_entry: dict[str, Any]):
     class_entries: list[dict[str, Any]] = []
     for class_entry in fg_entry["Classes"]:
         class_name = class_entry["ClassName"]
-        if class_name in class_name_to_entry:
+        if not merge and class_name in class_name_to_entry:
             print(f"WARNING: ignoring duplicate class {class_name}")
         else:
             class_name_to_entry[class_name] = class_entry
             class_entries.append(class_entry)
     native_class_to_class_entries[native_class] = class_entries
 
-
 for fg_entry in docs_raw:
     parse_and_add_fg_entry(fg_entry)
+
+def parse_modded_docs():
+    for p in args.extra_docs:
+        with open(p, "r", encoding="utf-8") as f:
+            extra_raw = json.load(f)
+        for fg_entry in extra_raw:
+            parse_and_add_fg_entry(fg_entry, merge=True)  
+
+
 
 
 ### Parsing helpers ###
@@ -1083,25 +1128,24 @@ def get_max_extraction_clock(
 
 
 def get_max_recipe_clock(
-    machine: Machine, recipe: Recipe, output_multiplier: float = 1.0
+    machine: Machine, recipe: Recipe, throughput_multiplier: float = 1.0
 ) -> Fraction:
     max_clock = machine.max_clock
 
     for item_class, input_rate in recipe.inputs:
         max_clock = min(
             max_clock,
-            get_conveyance_limit_clock(items[item_class], input_rate),
+            get_conveyance_limit_clock(items[item_class], input_rate * throughput_multiplier),
         )
 
     for item_class, output_rate in recipe.outputs:
         max_clock = min(
             max_clock,
-            get_conveyance_limit_clock(
-                items[item_class], output_rate * output_multiplier
-            ),
+            get_conveyance_limit_clock(items[item_class], output_rate * throughput_multiplier),
         )
 
     return max_clock
+
 
 
 def clamp_clock_choices(
@@ -1255,19 +1299,20 @@ def add_lp_column(
 
 
 def get_recipe_coeffs(
-    recipe: Recipe, clock: Fraction, output_multiplier: float = 1.0
-) -> defaultdict[str, float]:
+                recipe: Recipe, clock: Fraction, throughput_multiplier: float = 1.0
+            ) -> defaultdict[str, float]:
     coeffs: defaultdict[str, float] = defaultdict(float)
 
     for item_class, input_rate in recipe.inputs:
         item_var = f"item|{item_class}"
-        coeffs[item_var] -= clock * input_rate
+        coeffs[item_var] -= clock * input_rate * throughput_multiplier
 
     for item_class, output_rate in recipe.outputs:
         item_var = f"item|{item_class}"
-        coeffs[item_var] += clock * output_rate * output_multiplier
+        coeffs[item_var] += clock * output_rate * throughput_multiplier
 
     return coeffs
+
 
 
 def add_miner_columns(resource: Resource):
@@ -1308,7 +1353,10 @@ def add_miner_columns(resource: Resource):
         )
 
     if not resource.is_unlimited:
-        resource_multiplier = RESOURCE_MULTIPLIERS.get(resource.item_class, 1.0)
+        resource_multiplier = RESOURCE_MULTIPLIERS.get(
+            resource.item_class,
+            RESOURCE_MULTIPLIERS.get("All", RESOURCE_MULTIPLIERS.get("all", 1.0)),
+        )
         lp_lower_bounds[resource_var] = -resource.count * resource_multiplier
 
     lp_equalities[item_var] = 0.0
@@ -1328,43 +1376,33 @@ def add_manufacturer_columns(recipe: Recipe):
 
     for somersloops in somersloop_choices:
         if somersloops is None:
-            output_multiplier = 1.0
-            power_multiplier = 1.0
+            base_output_mult = 1.0
+            base_power_mult = 1.0
             requires_integrality = False
         else:
-            output_multiplier = (
-                1.0 + somersloops * manufacturer.production_shard_boost_multiplier
-            )
-            power_multiplier = (
-                output_multiplier
-                ** manufacturer.production_boost_power_consumption_exponent
-            )
-            # Fractional machines are generally fine due to clock speeds,
-            # but we should not allow fractional somersloops.
+            base_output_mult = 1.0 + somersloops * manufacturer.production_shard_boost_multiplier
+            base_power_mult = base_output_mult ** manufacturer.production_boost_power_consumption_exponent
             requires_integrality = True
+
+        # >>> New: global building multiplier applied to throughput and power <<<
+        throughput_mult = base_output_mult * args.building_multiplier
+        power_mult = base_power_mult * args.building_multiplier
 
         min_clock = manufacturer.min_clock
         max_clock = get_max_recipe_clock(
-            manufacturer, recipe, output_multiplier=output_multiplier
+            manufacturer, recipe, throughput_multiplier=throughput_mult  # changed name
         )
-        configured_clocks = (
-            MANUFACTURER_CLOCKS if somersloops is None else SOMERSLOOP_CLOCKS
-        )
+        configured_clocks = MANUFACTURER_CLOCKS if somersloops is None else SOMERSLOOP_CLOCKS
         clock_choices = clamp_clock_choices(configured_clocks, min_clock, max_clock)
 
         for clock in clock_choices:
-            power_consumption = (
-                get_power_consumption(manufacturer, clock, recipe) * power_multiplier
-            )
-            coeffs = {
-                "machines": 1,
-                "power_consumption": power_consumption,
-            }
+            power_consumption = get_power_consumption(manufacturer, clock, recipe) * power_mult
+            coeffs = {"machines": 1, "power_consumption": power_consumption}
             if somersloops is not None:
                 coeffs["somersloop_usage"] = somersloops
 
             recipe_coeffs = get_recipe_coeffs(
-                recipe, clock=clock, output_multiplier=output_multiplier
+                recipe, clock=clock, throughput_multiplier=throughput_mult  # changed name
             )
             for item_var, coeff in recipe_coeffs.items():
                 coeffs[item_var] = coeff
@@ -1485,7 +1523,11 @@ def add_geothermal_generator_columns(resource: Resource):
         requires_integrality=True,
     )
 
-    resource_multiplier = RESOURCE_MULTIPLIERS.get(resource.item_class, 1.0)
+    resource_multiplier = RESOURCE_MULTIPLIERS.get(
+        resource.item_class,
+        RESOURCE_MULTIPLIERS.get("All", RESOURCE_MULTIPLIERS.get("all", 1.0)),
+    )
+
     lp_lower_bounds[resource_var] = -resource.count * resource_multiplier
 
 
@@ -1645,7 +1687,7 @@ def get_all_variables() -> set[str]:
 
     for variable in lp_equalities.keys():
         if variable not in variables:
-            print(f"WARNING: equality constraint with unknown variable: {variable}")
+            print(f"INFO: equality constraint with unknown variable: {variable}")
 
     for variable in lp_lower_bounds.keys():
         if variable not in variables:
@@ -1960,7 +2002,8 @@ if args.xlsx_report:
 
     import xlsxwriter
 
-    workbook = xlsxwriter.Workbook(args.xlsx_report, {"nan_inf_to_errors": True})
+    workbook = xlsxwriter.Workbook(f'reports/{args.xlsx_report}-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.xlsx', 
+                                   {"nan_inf_to_errors": True})
 
     default_format = workbook.add_format({"align": "center"})
     top_format = workbook.add_format({"align": "center", "top": True})
@@ -1980,8 +2023,13 @@ if args.xlsx_report:
     sheet_list = workbook.add_worksheet("List" + args.xlsx_sheet_suffix)
     sheet_config = workbook.add_worksheet("Config" + args.xlsx_sheet_suffix)
 
-    def write_cell(sheet, *args, fmt=default_format):
-        sheet.write(*args, fmt)
+    def write_cell(sheet, row, col, value, fmt=None):
+        value = _norm_for_xlsx(value)
+        if fmt is None:
+            sheet.write(row, col, value)
+        else:
+            sheet.write(row, col, value, fmt)
+
 
     sheet_list.add_table(
         0,
