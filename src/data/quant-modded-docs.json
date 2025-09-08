@@ -1,0 +1,39 @@
+[
+ {
+  "NativeClass": "/Script/CoreUObject.Class'/Script/FactoryGame.FGRecipe'",
+  "Classes": [
+   {
+    "ClassName": "Recipe_Alternate_NuclearRocket_C",
+    "mDisplayName": "Alternate: Nuclear Rocket",
+    "mIngredients": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/SpaceElevatorParts/Desc_SpaceElevatorPart_4.Desc_SpaceElevatorPart_4_C'\",Amount=5),(ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/Ficsonium/Desc_Ficsonium.Desc_Ficsonium_C'\",Amount=5),(ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/CoolingSystem/Desc_CoolingSystem.Desc_CoolingSystem_C'\",Amount=10),(ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/ModularFrameFused/Desc_ModularFrameFused.Desc_ModularFrameFused_C'\",Amount=5))",
+    "mProduct": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/SpaceElevatorParts/Desc_SpaceElevatorPart_8.Desc_SpaceElevatorPart_8_C'\",Amount=5))",
+    "mManufactoringDuration": "120.000000",
+    "mProducedIn": "\"/Game/FactoryGame/Buildable/Factory/ManufacturerMk1/Build_ManufacturerMk1.Build_ManufacturerMk1_C\""
+   },
+   {
+    "ClassName": "Recipe_Alternate_CoalCoke_C",
+    "mDisplayName": "Alternate: Coal Coke",
+    "mIngredients": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/RawResources/Coal/Desc_Coal.Desc_Coal_C'\",Amount=1))",
+    "mProduct": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/PetroleumCoke/Desc_PetroleumCoke.Desc_PetroleumCoke_C'\",Amount=1))",
+    "mManufactoringDuration": "0.500000",
+    "mProducedIn": "(\"/Game/FactoryGame/Buildable/Factory/HadronCollider/Build_HadronCollider.Build_HadronCollider_C\")"
+   },
+   {
+    "ClassName": "Recipe_Alternate_CompactedCoalCoke_C",
+    "mDisplayName": "Alternate: Compacted Coal Coke",
+    "mIngredients": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/CompactedCoal/Desc_CompactedCoal.Desc_CompactedCoal_C'\",Amount=1))",
+    "mProduct": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/PetroleumCoke/Desc_PetroleumCoke.Desc_PetroleumCoke_C'\",Amount=3))",
+    "mManufactoringDuration": "0.500000",
+    "mProducedIn": "(\"/Game/FactoryGame/Buildable/Factory/HadronCollider/Build_HadronCollider.Build_HadronCollider_C\")"
+   },
+   {
+    "ClassName": "Recipe_Alternate_ThermonuclearPasta_C",
+    "mDisplayName": "Alternate: Thermonuclear Pasta",
+    "mIngredients": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/PressureConversionCube/Desc_PressureConversionCube.Desc_PressureConversionCube_C'\",Amount=1),(ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/CopperDust/Desc_CopperDust.Desc_CopperDust_C'\",Amount=125),(ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/IonizedFuel/Desc_IonizedFuel.Desc_IonizedFuel_C'\",Amount=25000))",
+    "mProduct": "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/SpaceElevatorParts/Desc_SpaceElevatorPart_9.Desc_SpaceElevatorPart_9_C'\",Amount=1))",
+    "mManufactoringDuration": "75.000000",
+    "mProducedIn": "(\"/Game/FactoryGame/Buildable/Factory/HadronCollider/Build_HadronCollider.Build_HadronCollider_C\")"
+   }
+  ]
+ }
+]

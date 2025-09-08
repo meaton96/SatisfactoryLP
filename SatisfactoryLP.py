@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 # pyright: basic
 
+import argparse
+import json
+import re
 from dataclasses import dataclass
 from fractions import Fraction
-import scipy.optimize
-import json
-import numpy as np
-import re
-import sys
-import argparse
 from collections import defaultdict
 from pprint import pprint
 from typing import Any, Iterable, TypeVar, cast
 from datetime import datetime
+import numpy as np
+import scipy.optimize
+from src.utils import *
+from src.config import *
+import sys
 
 
 T = TypeVar("T")
@@ -160,106 +162,11 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-### Constants ###
 
-
-# Common
-
-STACK_SIZES = {
-    "SS_HUGE": 500,
-    "SS_BIG": 200,
-    "SS_MEDIUM": 100,
-    "SS_SMALL": 50,
-    "SS_ONE": 1,
-    "SS_FLUID": 50000,
-}
-
-# Clock speeds
-INVERSE_CLOCK_GRANULARITY = 100 * 10000
 
 
 def float_to_clock(value: float) -> Fraction:
     return Fraction(round(value * INVERSE_CLOCK_GRANULARITY), INVERSE_CLOCK_GRANULARITY)
-
-
-def str_to_clock(s: str) -> Fraction:
-    return float_to_clock(float(s))
-
-
-def clock_to_percent_str(clock: Fraction) -> str:
-    return f"{float(100 * clock)}%"
-
-
-MACHINE_BASE_CLOCK = float_to_clock(1.0)
-MACHINE_MAX_CLOCK = float_to_clock(2.5)
-
-# Logistics
-CONVEYOR_BELT_CLASS = "Build_ConveyorBeltMk6_C"
-PIPELINE_CLASS = "Build_PipelineMK2_C"
-
-# Miners
-MINER_CLASS = "Build_MinerMk3_C"
-OIL_EXTRACTOR_CLASS = "Build_OilPump_C"
-WATER_EXTRACTOR_CLASS = "Build_WaterPump_C"
-RESOURCE_WELL_EXTRACTOR_CLASS = "Build_FrackingExtractor_C"
-RESOURCE_WELL_PRESSURIZER_CLASS = "Build_FrackingSmasher_C"
-ALL_MINER_CLASSES = (
-    MINER_CLASS,
-    OIL_EXTRACTOR_CLASS,
-    WATER_EXTRACTOR_CLASS,
-    RESOURCE_WELL_PRESSURIZER_CLASS,
-)
-
-# Sink
-SINK_CLASS = "Build_ResourceSink_C"
-
-# Items
-ALL_ITEM_NATIVE_CLASSES = (
-    "FGItemDescriptor",
-    "FGItemDescriptorBiomass",
-    "FGItemDescriptorNuclearFuel",
-    "FGItemDescriptorPowerBoosterFuel",
-    "FGResourceDescriptor",
-    "FGEquipmentDescriptor",
-    "FGConsumableDescriptor",
-    "FGPowerShardDescriptor",
-    "FGAmmoTypeProjectile",
-    "FGAmmoTypeInstantHit",
-    "FGAmmoTypeSpreadshot",
-)
-
-# Water
-WATER_CLASS = "Desc_Water_C"
-
-# Generators (excl. geothermal)
-ALL_GENERATOR_NATIVE_CLASSES = (
-    "FGBuildableGeneratorFuel",
-    "FGBuildableGeneratorNuclear",
-)
-
-# Geothermal generator
-GEOTHERMAL_GENERATOR_CLASS = "Build_GeneratorGeoThermal_C"
-GEYSER_CLASS = "Desc_Geyser_C"
-
-# Alien Power Augmenter
-ALIEN_POWER_AUGMENTER_CLASS = "Build_AlienPowerBuilding_C"
-ALIEN_POWER_MATRIX_CLASS = "Desc_AlienPowerFuel_C"
-
-# Resource map
-PURITY_MULTIPLIERS = {
-    "impure": 0.5,
-    "normal": 1.0,
-    "pure": 2.0,
-}
-RESOURCE_MAPPINGS = {
-    "Desc_LiquidOilWell_C": "Desc_LiquidOil_C",
-}
-
-# Miscellaneous
-BATTERY_CLASS = "Desc_Battery_C"
-ADDITIONAL_DISPLAY_NAMES = {
-    GEYSER_CLASS: "Geyser",
-}
 
 
 ### Debug ###
@@ -385,8 +292,7 @@ debug_dump(
 ### Load json ###
 
 
-DOCS_PATH = r"Docs.json"
-MAP_INFO_PATH = r"MapInfo.json"
+
 
 
 with open(DOCS_PATH, "r", encoding="utf-16") as f:
@@ -424,7 +330,7 @@ for fg_entry in docs_raw:
 
 def parse_modded_docs():
     for p in args.extra_docs:
-        with open(p, "r", encoding="utf-8") as f:
+        with open(p, "r", encoding="utf-16") as f:
             extra_raw = json.load(f)
         for fg_entry in extra_raw:
             parse_and_add_fg_entry(fg_entry, merge=True)  
@@ -638,7 +544,7 @@ def parse_miner(entry: dict[str, Any]) -> Miner:
         power_consumption=float(entry["mPowerConsumption"]),
         power_consumption_exponent=float(entry["mPowerConsumptionExponent"]),
         min_clock=str_to_clock(entry["mMinPotential"]),
-        max_clock=MACHINE_MAX_CLOCK,
+        max_clock=float_to_clock(MACHINE_MAX_CLOCK),
         is_variable_power=False,
         extraction_rate_base=extraction_rate_base,
         uses_resource_wells=uses_resource_wells,
@@ -682,7 +588,7 @@ def parse_manufacturer(entry: dict[str, Any], is_variable_power: bool) -> Manufa
         power_consumption=float(entry["mPowerConsumption"]),
         power_consumption_exponent=float(entry["mPowerConsumptionExponent"]),
         min_clock=str_to_clock(entry["mMinPotential"]),
-        max_clock=MACHINE_MAX_CLOCK,
+        max_clock=float_to_clock(MACHINE_MAX_CLOCK),
         is_variable_power=is_variable_power,
         can_change_production_boost=(entry["mCanChangeProductionBoost"] == "True"),
         base_production_boost=float(entry["mBaseProductionBoost"]),
@@ -816,7 +722,7 @@ def parse_generator(entry: dict[str, Any]) -> PowerGenerator:
         fuels=fuels,
         power_production=float(entry["mPowerProduction"]),
         min_clock=str_to_clock(entry["mMinPotential"]),
-        max_clock=MACHINE_MAX_CLOCK,
+        max_clock=float_to_clock(MACHINE_MAX_CLOCK),
         requires_supplemental=(entry["mRequiresSupplementalResource"] == "True"),
         supplemental_to_power_ratio=float(entry["mSupplementalToPowerRatio"]),
     )
@@ -834,8 +740,8 @@ def parse_geothermal_generator(entry: dict[str, Any]) -> GeothermalGenerator:
     return GeothermalGenerator(
         class_name=entry["ClassName"],
         display_name=entry["mDisplayName"],
-        min_clock=MACHINE_BASE_CLOCK,
-        max_clock=MACHINE_BASE_CLOCK,
+        min_clock=float_to_clock(MACHINE_BASE_CLOCK),
+        max_clock=float_to_clock(MACHINE_BASE_CLOCK),
         mean_variable_power_production=mean_variable_power_production,
     )
 
@@ -1517,7 +1423,7 @@ def add_geothermal_generator_columns(resource: Resource):
         coeffs,
         type_="generator",
         name=resource_id,
-        display_name=get_item_display_name(GEYSER_CLASS),
+        display_name=get_item_display_name(GEOTHERMAL_CLASS),
         machine_name=geothermal_generator.display_name,
         resource_subtype=resource.subtype,
         requires_integrality=True,
