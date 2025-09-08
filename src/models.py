@@ -4,10 +4,52 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from fractions import Fraction
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+import numpy as np
+from scipy.optimize import OptimizeResult
+from scipy.sparse import csc_matrix
+from scipy.optimize import LinearConstraint
+import numpy as np
+from numpy.typing import NDArray
 import re
 
-# --- Data container with proper defaults ---
+
+@dataclass(slots=True)
+class LPResults:
+    lp_result: Optional[OptimizeResult] = None
+    sorted_columns: Optional[List[Tuple[str, "LPColumn"]]] = None
+    objective_order: Dict[str, int] = field(default_factory=dict)
+    extra_cost_order: Dict[str, int] = field(default_factory=dict)
+    resource_subtype_order: Dict[str, int] = field(default_factory=dict)
+    lp_variables: Set[str] = field(default_factory=set)
+    lp_A: Optional[NDArray[np.float64]] = None
+    lp_b_l: Optional[NDArray[np.float64]] = None
+    lp_b_u: Optional[NDArray[np.float64]] = None
+    lp_variable_indices: Dict[str, int] = field(default_factory=dict)
+    lp_lower_bounds: Dict[str, float] = field(default_factory=dict)
+
+@dataclass(slots=True)
+class LPClocks:
+    MINER_CLOCKS: List[Fraction] = field(default_factory=list)
+    MANUFACTURER_CLOCKS: List[Fraction] = field(default_factory=list)
+    SOMERSLOOP_CLOCKS: List[Fraction] = field(default_factory=list)
+    GENERATOR_CLOCKS: List[Fraction] = field(default_factory=list)
+
+@dataclass(slots=True)
+class LPConfig:
+    lp_clocks: LPClocks = field(default_factory=LPClocks)
+    resource_multipliers: Dict[str, float] = field(default_factory=dict)
+    disabled_recipes: List[str] = field(default_factory=list)
+    lp_columns: Dict[str, "LPColumn"] = field(default_factory=dict)
+    lp_equalities: Dict[str, float] = field(default_factory=dict)
+    lp_lower_bounds: Dict[str, float] = field(default_factory=dict)
+    lp_c: Optional[NDArray[np.float64]] = None
+    lp_constraints: Optional[LinearConstraint] = None
+    lp_integrality: Optional[NDArray[np.int64]] = None
+
+
+
 @dataclass(slots=True)
 class Data:
     items: Dict[str, Item] = field(default_factory=dict)
@@ -21,7 +63,7 @@ class Data:
     geothermal_generator: Optional[GeothermalGenerator] = None
 
 
-# --- Constants / regexes ---
+
 @dataclass(slots=True)
 class Consts:
     POWER_PRODUCTION_MULTIPLIER: float = 0.0

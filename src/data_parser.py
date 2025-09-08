@@ -81,47 +81,35 @@ class DataParser:
         item = self.data.items[resource.item_class]
         return min(max_clock, self.get_conveyance_limit_clock(item, extraction_rate))
 
-
     def get_max_recipe_clock(self,
-        machine: Machine, recipe: Recipe, throughput_multiplier: float = 1.0
-    ) -> Fraction:
-        max_clock = machine.max_clock
+            machine: Machine, recipe: Recipe, throughput_multiplier: float = 1.0
+        ) -> Fraction:
+            max_clock = machine.max_clock
 
-        for item_class, input_rate in recipe.inputs:
-            max_clock = min(
-                max_clock,
-                self.get_conveyance_limit_clock(self.data.items[item_class], input_rate * throughput_multiplier),
-            )
+            for item_class, input_rate in recipe.inputs:
+                max_clock = min(
+                    max_clock,
+                    self.get_conveyance_limit_clock(self.data.items[item_class], input_rate * throughput_multiplier),
+                )
 
-        for item_class, output_rate in recipe.outputs:
-            max_clock = min(
-                max_clock,
-                self.get_conveyance_limit_clock(self.data.items[item_class], output_rate * throughput_multiplier),
-            )
+            for item_class, output_rate in recipe.outputs:
+                max_clock = min(
+                    max_clock,
+                    self.get_conveyance_limit_clock(self.data.items[item_class], output_rate * throughput_multiplier),
+                )
 
-        return max_clock
-
-
-
-    def clamp_clock_choices(self,
-        configured_clocks: list[Fraction], min_clock: Fraction, max_clock: Fraction
-    ) -> list[Fraction]:
-        
-
-        assert min_clock < max_clock
-        return sorted(
-            {min(max_clock, max(min_clock, clock)) for clock in configured_clocks}
-        )
+            return max_clock
 
 
     
 
 
-    def get_item_display_name(self,item_class: str) -> str:
+    def get_item_display_name(self, item_class: str) -> str:
         if item_class in self.data.items:
             return self.data.items[item_class].display_name
         else:
             return ADDITIONAL_DISPLAY_NAMES[item_class]
+    
         
     def parse(self):
         ### Initial parsing ###

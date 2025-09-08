@@ -2,16 +2,13 @@
 # pyright: basic
 
 from fractions import Fraction
-from src.config import INVERSE_CLOCK_GRANULARITY
+from src.config import INVERSE_CLOCK_GRANULARITY, ADDITIONAL_DISPLAY_NAMES
 from .models import *
 from typing import Iterable, cast, TypeVar
 from collections import defaultdict
 
 T = TypeVar("T")
 
-
-def float_to_clock(value: float) -> Fraction:
-    return Fraction(round(value * INVERSE_CLOCK_GRANULARITY), INVERSE_CLOCK_GRANULARITY)
 
 
 def str_to_clock(s: str) -> Fraction:
@@ -95,6 +92,9 @@ def create_recipe_for_generator(generator: PowerGenerator, fuel: Fuel, data: Dat
         mean_variable_power_consumption=0.0,
     )
 
+def float_to_clock(value: float) -> Fraction:
+    return Fraction(round(value * INVERSE_CLOCK_GRANULARITY), INVERSE_CLOCK_GRANULARITY)
+
 def parse_clock_spec(s: str) -> list[Fraction]:
     result: list[Fraction] = []
     for token in s.split(","):
@@ -173,3 +173,47 @@ def get_all_variables(
             print(f"WARNING: lower bound constraint with unknown variable: {variable}")
 
     return variables
+
+
+
+def clamp_clock_choices(
+        configured_clocks: list[Fraction], min_clock: Fraction, max_clock: Fraction
+    ) -> list[Fraction]:
+        
+
+        assert min_clock < max_clock
+        return sorted(
+            {min(max_clock, max(min_clock, clock)) for clock in configured_clocks}
+        )
+
+
+    
+
+
+def create_empty_variable_breakdown(variable: str,
+                                    data_parser: Any,
+                                    variable_type_order: dict[Any, int],
+                                    resource_subtype_order: Any
+                                    ) -> VariableBreakdown:
+    tokens = variable.split("|")
+    type_ = tokens[0]
+    if type_ == "item" or type_ == "resource":
+        item_class = tokens[1]
+        tokens[1] = data_parser.get_item_display_name(item_class)
+    display_name = "|".join(tokens)
+    sort_key: list[Any] = [variable_type_order[type_]]
+    if type_ == "resource":
+        sort_key.append(tokens[1])
+        sort_key.append(resource_subtype_order.get(tokens[2], np.inf))
+        sort_key.append(tokens[2])
+    else:
+        sort_key.append(display_name)
+    return VariableBreakdown(
+        type_=type_,
+        display_name=display_name,
+        sort_key=sort_key,
+        production=[],
+        consumption=[],
+        initial=None,
+        final=None,
+    )
