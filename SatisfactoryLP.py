@@ -1,10 +1,7 @@
-import json
-import re
 from fractions import Fraction
 from collections import defaultdict
 from pprint import pprint
 from typing import Any, Iterable, TypeVar, cast
-from datetime import datetime
 import numpy as np
 import scipy.optimize
 from src.utils import *
@@ -24,10 +21,6 @@ arg_parser = get_parser()
 args = arg_parser.parse_args()
 
 
-
-
-
-
 def float_to_clock(value: float) -> Fraction:
     return Fraction(round(value * INVERSE_CLOCK_GRANULARITY), INVERSE_CLOCK_GRANULARITY)
 
@@ -44,28 +37,6 @@ data_parser.init(args, dbug)
 
 
 ### Configured clock speeds ###
-
-
-
-def parse_clock_spec(s: str) -> list[Fraction]:
-    result: list[Fraction] = []
-    for token in s.split(","):
-        token = token.strip()
-        if "/" in token:
-            bounds, _, step_str = token.rpartition("/")
-            lower_str, _, upper_str = bounds.rpartition("-")
-            lower = str_to_clock(lower_str)
-            upper = str_to_clock(upper_str)
-            step = str_to_clock(step_str)
-            current = lower
-            while current <= upper:
-                result.append(current)
-                current += step
-        else:
-            result.append(str_to_clock(token))
-    result.sort()
-    return result
-
 
 MINER_CLOCKS = parse_clock_spec(args.miner_clocks)
 MANUFACTURER_CLOCKS = parse_clock_spec(args.manufacturer_clocks)
@@ -84,20 +55,7 @@ dbug.debug_dump(
 """.strip(),
 )
 
-
 ### Configured resource multipliers ###
-
-
-def parse_resource_multipliers(s: str) -> dict[str, float]:
-    result: dict[str, float] = {}
-    if s:
-        for token in s.split(","):
-            item_class, _, multiplier = token.partition(":")
-            item_class = item_class.strip()
-            assert item_class not in result
-            result[item_class] = float(multiplier)
-    return result
-
 
 RESOURCE_MULTIPLIERS = parse_resource_multipliers(args.resource_multipliers)
 
@@ -121,13 +79,6 @@ dbug.debug_dump(
 {DISABLED_RECIPES=}
 """.strip(),
 )
-
-
-
-### LP setup ###
-
-
-
 
 
 lp_columns: dict[str, LPColumn] = {}
@@ -210,20 +161,7 @@ def add_lp_column(
     )
 
 
-def get_recipe_coeffs(
-                recipe: Recipe, clock: Fraction, throughput_multiplier: float = 1.0
-            ) -> defaultdict[str, float]:
-    coeffs: defaultdict[str, float] = defaultdict(float)
 
-    for item_class, input_rate in recipe.inputs:
-        item_var = f"item|{item_class}"
-        coeffs[item_var] -= clock * input_rate * throughput_multiplier
-
-    for item_class, output_rate in recipe.outputs:
-        item_var = f"item|{item_class}"
-        coeffs[item_var] += clock * output_rate * throughput_multiplier
-
-    return coeffs
 
 
 
@@ -240,10 +178,6 @@ def add_miner_columns(resource: Resource):
     max_clock = data_parser.get_max_extraction_clock(miner, resource, extraction_rate)
     configured_clocks = MANUFACTURER_CLOCKS if resource.is_unlimited else MINER_CLOCKS
 
-
-    ###
-    print("[add_miner_columns]", resource,
-      "configured:", configured_clocks, "min:", min_clock, "max:", max_clock)
 
     clock_choices = data_parser.clamp_clock_choices(configured_clocks, min_clock, max_clock)
 
@@ -585,50 +519,31 @@ lp_lower_bounds["somersloop"] = -data_parser.constants.NUM_SOMERSLOOPS_AVAILABLE
 # dbug.debug_dump("LP equalities (before pruning)", lp_equalities)
 # dbug.debug_dump("LP lower bounds (before pruning)", lp_lower_bounds)
 
-########
-BATTERY_VAR = f"item|{BATTERY_CLASS}"
-print("=== PARSER SANITY ===")
-print("items:", len(data_parser.data.items))
-print("recipes:", len(data_parser.data.recipes))
-print("has battery item key:", BATTERY_VAR in {f"item|{k}" for k in data_parser.data.items.keys()})
-print("any column references BATTERY_VAR:", any(BATTERY_VAR in c.coeffs for c in lp_columns.values()))
-print("columns mentioning battery (pre-prune):", [cid for cid,c in lp_columns.items() if BATTERY_VAR in c.coeffs])
+# ########
+# BATTERY_VAR = f"item|{BATTERY_CLASS}"
+# print("=== PARSER SANITY ===")
+# print("items:", len(data_parser.data.items))
+# print("recipes:", len(data_parser.data.recipes))
+# print("has battery item key:", BATTERY_VAR in {f"item|{k}" for k in data_parser.data.items.keys()})
+# print("any column references BATTERY_VAR:", any(BATTERY_VAR in c.coeffs for c in lp_columns.values()))
+# print("columns mentioning battery (pre-prune):", [cid for cid,c in lp_columns.items() if BATTERY_VAR in c.coeffs])
 
 # Variables present before pruning
-def get_all_variables_snapshot():
-    vs = set()
-    for c in lp_columns.values():
-        vs.update(c.coeffs.keys())
-    return vs
+# def get_all_variables_snapshot():
+#     vs = set()
+#     for c in lp_columns.values():
+#         vs.update(c.coeffs.keys())
+#     return vs
 
-pre_vars = get_all_variables_snapshot()
-print("has variable 'drone_battery_cost' pre-prune:", "drone_battery_cost" in pre_vars)
+# pre_vars = get_all_variables_snapshot()
+# print("has variable 'drone_battery_cost' pre-prune:", "drone_battery_cost" in pre_vars)
 
 #########
 
-def get_all_variables() -> set[str]:
-    variables: set[str] = set()
-
-    for column in lp_columns.values():
-        for variable in column.coeffs.keys():
-            variables.add(variable)
-
-    for variable in variables:
-        if variable not in lp_equalities and variable not in lp_lower_bounds:
-            print(f"WARNING: no constraint for variable: {variable}")
-
-    for variable in lp_equalities.keys():
-        if variable not in variables:
-            print(f"INFO: equality constraint with unknown variable: {variable}")
-
-    for variable in lp_lower_bounds.keys():
-        if variable not in variables:
-            print(f"WARNING: lower bound constraint with unknown variable: {variable}")
-
-    return variables
 
 
-lp_variables = get_all_variables()
+
+lp_variables = get_all_variables(lp_columns, lp_equalities, lp_lower_bounds)
 
 # dbug.debug_dump("LP variables (before pruning)", lp_variables)
 
@@ -678,7 +593,7 @@ dbug.debug_dump("LP columns (after pruning)", lp_columns)
 dbug.debug_dump("LP equalities (after pruning)", lp_equalities)
 dbug.debug_dump("LP lower bounds (after pruning)", lp_lower_bounds)
 
-lp_variables = get_all_variables()
+lp_variables = get_all_variables(lp_columns, lp_equalities, lp_lower_bounds)
 
 dbug.debug_dump("LP variables (after pruning)", lp_variables)
 
@@ -686,16 +601,7 @@ dbug.debug_dump("LP variables (after pruning)", lp_variables)
 ### LP run ###
 
 
-def to_index_map(seq: Iterable[T]) -> dict[T, int]:
-    return {value: index for index, value in enumerate(seq)}
 
-
-def from_index_map(d: dict[T, int]) -> list[T]:
-    result: list[T | None] = [None] * len(d)
-    for value, index in d.items():
-        result[index] = value
-    assert all(value is not None for value in result)
-    return cast(list[T], result)
 
 
 # order is for report display, but we might as well sort it here

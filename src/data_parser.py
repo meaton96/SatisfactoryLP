@@ -106,8 +106,7 @@ class DataParser:
     def clamp_clock_choices(self,
         configured_clocks: list[Fraction], min_clock: Fraction, max_clock: Fraction
     ) -> list[Fraction]:
-        print("[clamp_clock_choices] configured:", configured_clocks,
-        "min_clock:", min_clock, "max_clock:", max_clock)
+        
 
         assert min_clock < max_clock
         return sorted(
