@@ -88,8 +88,18 @@ class PowerGenerator(Machine):
 
 @dataclass
 class GeothermalGenerator(Machine):
-    mean_variable_power_production: float
+    mean_variable_power_production: float = 0.0
 
+@dataclass
+class Resource:
+    resource_id: str
+    item_class: str
+    subtype: str
+    multiplier: float
+    is_unlimited: bool
+    count: int
+    is_resource_well: bool
+    num_satellites: int
 
 # Linear Programming Setup
 @dataclass
@@ -123,3 +133,9 @@ class VariableBreakdown:
     consumption: list[BudgetEntry]
     initial: float | None
     final: float | None
+
+@dataclass
+class HardLimit:
+    name: str
+    weight: float
+    lower_bound: float
