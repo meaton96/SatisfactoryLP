@@ -233,11 +233,18 @@ def add_miner_columns(resource: Resource):
     item = data_parser.data.items[item_class]
 
     miner = data_parser.get_miner_for_resource(resource)
+    
 
     extraction_rate = miner.extraction_rate_base * resource.multiplier
     min_clock = miner.min_clock
     max_clock = data_parser.get_max_extraction_clock(miner, resource, extraction_rate)
     configured_clocks = MANUFACTURER_CLOCKS if resource.is_unlimited else MINER_CLOCKS
+
+
+    ###
+    print("[add_miner_columns]", resource,
+      "configured:", configured_clocks, "min:", min_clock, "max:", max_clock)
+
     clock_choices = data_parser.clamp_clock_choices(configured_clocks, min_clock, max_clock)
 
     resource_var = f"resource|{resource_id}"
@@ -247,7 +254,7 @@ def add_miner_columns(resource: Resource):
         machines = 1 + (resource.num_satellites if resource.is_resource_well else 0)
         coeffs = {
             "machines": machines,
-            "power_consumption": data_parser.get_power_consumption(miner, clock),
+            "power_consumption": get_power_consumption(miner, clock),
             item_var: clock * extraction_rate,
         }
 
@@ -308,7 +315,7 @@ def add_manufacturer_columns(recipe: Recipe):
         clock_choices = data_parser.clamp_clock_choices(configured_clocks, min_clock, max_clock)
 
         for clock in clock_choices:
-            power_consumption = data_parser.get_power_consumption(manufacturer, clock, recipe) * power_mult
+            power_consumption = get_power_consumption(manufacturer, clock, recipe) * power_mult
             coeffs = {"machines": 1, "power_consumption": power_consumption}
             if somersloops is not None:
                 coeffs["somersloop_usage"] = somersloops
@@ -374,7 +381,7 @@ for item in data_parser.data.items.values():
 
 
 def add_generator_columns(generator: PowerGenerator, fuel: Fuel):
-    recipe = data_parser.create_recipe_for_generator(generator, fuel)
+    recipe = create_recipe_for_generator(generator, fuel, data_parser.data)
     fuel_item = data_parser.data.items[fuel.fuel_class]
 
     min_clock = generator.min_clock
@@ -383,7 +390,7 @@ def add_generator_columns(generator: PowerGenerator, fuel: Fuel):
 
     for clock in clock_choices:
         power_production = (
-            data_parser.get_power_production(generator, clock=clock) * data_parser.constants.POWER_PRODUCTION_MULTIPLIER
+            get_power_production(generator, clock=clock) * data_parser.constants.POWER_PRODUCTION_MULTIPLIER
         )
         coeffs = {
             "machines": 1,

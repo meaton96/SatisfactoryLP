@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from .models import LPColumn
 from typing import Any
+import xlsxwriter
 
 
 class XlxsDump:
@@ -44,7 +45,7 @@ class XlxsDump:
     def dump(self, args):
         print("Writing xlsx report")
 
-        import xlsxwriter
+        
 
         workbook = xlsxwriter.Workbook(f'reports/{args.xlsx_report}-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.xlsx', 
                                     {"nan_inf_to_errors": True})

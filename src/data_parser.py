@@ -1,112 +1,41 @@
+from __future__ import annotations
 import json
 from .config import *
 from typing import Any, Iterable
 import re
 from .debug import Debugger
 from .models import *
+from .utils import parse_paren_list, find_item_amounts
 from src.utils import *
 from dataclasses import dataclass
+
 ### Load json ###
 
-class Data:
-    def __init__(self):
-        self.items: dict[str, Item] = {}
-        self.miners: dict[str, Miner] = {}
-        self.resources: dict[str, Resource] = {}
-        self.geysers: dict[str, Resource] = {}
-        self.manufacturers: dict[str, Manufacturer] = {}
-        self.recipes: dict[str, Recipe] = {}
-        self.generators: dict[str, PowerGenerator] = {}
-        self.map_info: dict[str, Any] = {}
-        self.geothermal_generator: GeothermalGenerator | None
 
-    
-
-@dataclass
-class Consts:
-    POWER_PRODUCTION_MULTIPLIER: float = 0.0
-    CONVEYOR_BELT_LIMIT: float = 0.0
-    PIPELINE_LIMIT: float = 0.0
-    SINK_POWER_CONSUMPTION: float = 0.0
-    NUM_SOMERSLOOPS_AVAILABLE: float = 0.0
-    NUM_SOMERSLOOPS_AVAILABLE_FOR_PRODUCTION: float = 0.0
-    ALIEN_POWER_AUGMENTER_TOTAL_STATIC_POWER: float = 0.0
-    ALIEN_POWER_AUGMENTER_TOTAL_CIRCUIT_BOOST: float = 0.0
-    POWER_PRODUCTION_MULTIPLIER: float = 0.0
-    TOTAL_ALIEN_POWER_MATRIX_COST: float = 0.0
 
 
 class DataParser:
 
-    docs_raw: Any
-    args: Any
-    QUALIFIED_CLASS_NAME_REGEX = re.compile(r"\"?/Script/[^']+'/[\w\-/]+\.(\w+)'\"?")
-    UNQUALIIFIED_CLASS_NAME_REGEX = re.compile(r"\"?/[\w\-/]+\.(\w+)\"?")
-    ITEM_AMOUNT_REGEX = re.compile(r"\(ItemClass=([^,]+),Amount=(\d+)\)")
-    dbug: Debugger
-    data: Data
-    constants: Consts
+    def __init__(self):
+        self.docs_raw: Any
+        self.args: Any
+        
+        self.dbug: Debugger
+        self.data: Data
+        self.constants: Consts
 
     
-    
-    def __init__(self) -> None:
-        pass
 
     def init(self, args, debug):
         self.args = args
         self.dbug = debug
         self.data = Data()
         self.constants = Consts()
-        self.open_json()
-        self.parse()
-
-    def open_json(self):
         with open(DOCS_PATH, "r", encoding="utf-16") as f:
             self.docs_raw = json.load(f)
+        self.parse()
 
-    def parse_paren_list(self, s: str) -> list[str] | None:
-        if not s:
-            return None
-        assert s.startswith("(") and s.endswith(")")
-        s = s[1:-1]
-        if not s:
-            return []
-        else:
-            return s.split(",")
         
-    
-
-
-    def extract_class_name(self, s: str) -> str:
-        m = self.QUALIFIED_CLASS_NAME_REGEX.fullmatch(
-            s
-        ) or self.UNQUALIIFIED_CLASS_NAME_REGEX.fullmatch(s)
-        assert m is not None, s
-        return m.group(1)
-
-
-    def parse_class_list(self, s: str) -> list[str] | None:
-        l = self.parse_paren_list(s)
-        if l is None:
-            return None
-        return [self.extract_class_name(x) for x in l]
-    
-    def find_item_amounts(self, s: str) -> Iterable[tuple[str, int]]:
-        for m in self.ITEM_AMOUNT_REGEX.finditer(s):
-            yield (self.extract_class_name(m[1]), int(m[2]))
-
-    def get_power_consumption(self,
-        machine: PowerConsumer, clock: Fraction, recipe: Recipe | None = None
-    ) -> float:
-        power_consumption = machine.power_consumption
-        if recipe is not None and machine.is_variable_power:
-            power_consumption += recipe.mean_variable_power_consumption
-        return power_consumption * (clock**machine.power_consumption_exponent)
-
-
-    def get_power_production(self,generator: PowerGenerator, clock: Fraction) -> float:
-        return generator.power_production * clock
-
 
     def get_miner_for_resource(self,resource: Resource) -> Miner:
         item_class = resource.item_class
@@ -124,6 +53,7 @@ class DataParser:
 
 
     def get_form_conveyance_limit(self,form: str) -> float:
+
         if form == "RF_SOLID":
             return self.constants.CONVEYOR_BELT_LIMIT
         elif form == "RF_LIQUID" or form == "RF_GAS":
@@ -134,7 +64,9 @@ class DataParser:
 
     def get_conveyance_limit_clock(self,item: Item, rate: float) -> Fraction:
         conveyance_limit = self.get_form_conveyance_limit(item.form)
-        return float_to_clock(conveyance_limit / rate)
+        a = float_to_clock(conveyance_limit / rate)
+        print(f"get conveyance limit: {item.display_name} : {item.form} : {conveyance_limit} : {a}")
+        return a
 
 
     def get_max_extraction_clock(self,
@@ -174,46 +106,16 @@ class DataParser:
     def clamp_clock_choices(self,
         configured_clocks: list[Fraction], min_clock: Fraction, max_clock: Fraction
     ) -> list[Fraction]:
+        print("[clamp_clock_choices] configured:", configured_clocks,
+        "min_clock:", min_clock, "max_clock:", max_clock)
+
         assert min_clock < max_clock
         return sorted(
             {min(max_clock, max(min_clock, clock)) for clock in configured_clocks}
         )
 
 
-    # It's convenient to consider generators burning fuel as recipes,
-    # even though they are not actually listed as recipes.
-    def create_recipe_for_generator(self,generator: PowerGenerator, fuel: Fuel) -> Recipe:
-        inputs: list[tuple[str, float]] = []
-        outputs: list[tuple[str, float]] = []
-
-        power_production = generator.power_production
-
-        fuel_class = fuel.fuel_class
-        fuel_item = self.data.items[fuel_class]
-        fuel_rate = 60.0 * power_production / fuel_item.energy
-        inputs.append((fuel_class, fuel_rate))
-
-        if generator.requires_supplemental:
-            assert fuel.supplemental_resource_class is not None
-            supplemental_class = fuel.supplemental_resource_class
-            supplemental_rate = (
-                60.0 * power_production * generator.supplemental_to_power_ratio
-            )
-            inputs.append((supplemental_class, supplemental_rate))
-
-        if fuel.byproduct is not None:
-            byproduct_class = fuel.byproduct
-            byproduct_rate = fuel_rate * fuel.byproduct_amount
-            outputs.append((byproduct_class, byproduct_rate))
-
-        return Recipe(
-            class_name="",
-            display_name="",
-            manufacturer=generator.class_name,
-            inputs=inputs,
-            outputs=outputs,
-            mean_variable_power_consumption=0.0,
-        )
+    
 
 
     def get_item_display_name(self,item_class: str) -> str:
@@ -255,15 +157,17 @@ class DataParser:
                 for fg_entry in extra_raw:
                     parse_and_add_fg_entry(fg_entry, merge=True)  
 
-        CONVEYOR_BELT_LIMIT = 0.5 * float(class_name_to_entry[CONVEYOR_BELT_CLASS]["mSpeed"])
-        PIPELINE_LIMIT = 60000.0 * float(class_name_to_entry[PIPELINE_CLASS]["mFlowLimit"])
-        SINK_POWER_CONSUMPTION = float(class_name_to_entry[SINK_CLASS]["mPowerConsumption"])
+        self.constants.CONVEYOR_BELT_LIMIT = 0.5 * float(class_name_to_entry[CONVEYOR_BELT_CLASS]["mSpeed"])
+        self.constants.PIPELINE_LIMIT = 60000.0 * float(class_name_to_entry[PIPELINE_CLASS]["mFlowLimit"])
+        self.constants.SINK_POWER_CONSUMPTION = float(class_name_to_entry[SINK_CLASS]["mPowerConsumption"])
+
+
         self.dbug.debug_dump(
             "Misc constants",
             f"""
-        {CONVEYOR_BELT_LIMIT=}
-        {PIPELINE_LIMIT=}
-        {SINK_POWER_CONSUMPTION=}
+        {self.constants.CONVEYOR_BELT_LIMIT=}
+        {self.constants.PIPELINE_LIMIT=}
+        {self.constants.SINK_POWER_CONSUMPTION=}
         """.strip(),
         )
 
@@ -321,7 +225,7 @@ class DataParser:
                 * float(extractor["mItemsPerCycle"])
             )
 
-            allowed_resource_forms = self.parse_paren_list(extractor["mAllowedResourceForms"])
+            allowed_resource_forms = parse_paren_list(extractor["mAllowedResourceForms"])
             assert allowed_resource_forms is not None
 
             return Miner(
@@ -338,7 +242,7 @@ class DataParser:
                 only_allow_certain_resources=(
                     extractor["mOnlyAllowCertainResources"] == "True"
                 ),
-                allowed_resources=self.parse_class_list(extractor["mAllowedResources"]),
+                allowed_resources=parse_class_list(extractor["mAllowedResources"], self.constants),
             )
 
 
@@ -405,7 +309,7 @@ class DataParser:
 
 
         def parse_recipe(entry: dict[str, Any]) -> Recipe | None:
-            produced_in = self.parse_class_list(entry["mProducedIn"]) or []
+            produced_in = parse_class_list(entry["mProducedIn"], self.constants) or []
             recipe_manufacturer = None
 
             for manufacturer in produced_in:
@@ -428,7 +332,7 @@ class DataParser:
             def item_rates(key: str):
                 return [
                     (item, recipe_rate * amount)
-                    for (item, amount) in self.find_item_amounts(entry[key])
+                    for (item, amount) in find_item_amounts(entry[key], self.constants)
                 ]
 
             vpc_constant = float(entry["mVariablePowerConsumptionConstant"])

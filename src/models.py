@@ -1,9 +1,52 @@
+from __future__ import annotations
 ### Classes ###
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fractions import Fraction
-from typing import Any
+from typing import Any, Dict, Optional
+import re
+
+# --- Data container with proper defaults ---
+@dataclass(slots=True)
+class Data:
+    items: Dict[str, Item] = field(default_factory=dict)
+    miners: Dict[str, Miner] = field(default_factory=dict)
+    resources: Dict[str, Resource] = field(default_factory=dict)
+    geysers: Dict[str, Resource] = field(default_factory=dict)
+    manufacturers: Dict[str, Manufacturer] = field(default_factory=dict)
+    recipes: Dict[str, Recipe] = field(default_factory=dict)
+    generators: Dict[str, PowerGenerator] = field(default_factory=dict)
+    map_info: Dict[str, Any] = field(default_factory=dict)
+    geothermal_generator: Optional[GeothermalGenerator] = None
+
+
+# --- Constants / regexes ---
+@dataclass(slots=True)
+class Consts:
+    POWER_PRODUCTION_MULTIPLIER: float = 0.0
+    CONVEYOR_BELT_LIMIT: float = 0.0
+    PIPELINE_LIMIT: float = 0.0
+    SINK_POWER_CONSUMPTION: float = 0.0
+    NUM_SOMERSLOOPS_AVAILABLE: float = 0.0
+    NUM_SOMERSLOOPS_AVAILABLE_FOR_PRODUCTION: float = 0.0
+    ALIEN_POWER_AUGMENTER_TOTAL_STATIC_POWER: float = 0.0
+    ALIEN_POWER_AUGMENTER_TOTAL_CIRCUIT_BOOST: float = 0.0
+    TOTAL_ALIEN_POWER_MATRIX_COST: float = 0.0
+
+    QUALIFIED_CLASS_NAME_REGEX: re.Pattern[str] = field(
+        default_factory=lambda: re.compile(r"\"?/Script/[^']+'/[\w\-/]+\.(\w+)'\"?"),
+        init=False
+    )
+    UNQUALIFIED_CLASS_NAME_REGEX: re.Pattern[str] = field(
+        default_factory=lambda: re.compile(r"\"?/[\w\-/]+\.(\w+)\"?"),
+        init=False
+    )
+    ITEM_AMOUNT_REGEX: re.Pattern[str] = field(
+        default_factory=lambda: re.compile(r"\(ItemClass=([^,]+),Amount=(\d+)\)"),
+        init=False
+    )
+
 
 # game modeling
 @dataclass
