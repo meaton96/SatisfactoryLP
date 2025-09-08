@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 
 from fractions import Fraction
+from typing import Any
 
+# game modeling
 @dataclass
 class ClassObject:
     class_name: str
@@ -87,3 +89,37 @@ class PowerGenerator(Machine):
 @dataclass
 class GeothermalGenerator(Machine):
     mean_variable_power_production: float
+
+
+# Linear Programming Setup
+@dataclass
+class LPColumn:
+    coeffs: dict[str, float]
+    type_: str
+    name: str
+    display_name: str
+    full_display_name: str
+    machine_name: str | None
+    resource_subtype: str | None
+    clock: Fraction | None
+    somersloops: int | None
+    objective_weight: float | None
+    requires_integrality: bool
+
+@dataclass
+class BudgetEntry:
+    desc: str
+    count: float
+    rate: float
+    share: float
+
+
+@dataclass
+class VariableBreakdown:
+    type_: str
+    display_name: str
+    sort_key: Any
+    production: list[BudgetEntry]
+    consumption: list[BudgetEntry]
+    initial: float | None
+    final: float | None

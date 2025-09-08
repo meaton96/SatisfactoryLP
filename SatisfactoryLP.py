@@ -14,151 +14,16 @@ import scipy.optimize
 from src.utils import *
 from src.config import *
 from src.models import  *
+from src.debug import Debugger
+from src.xlsx_dump import XlxsDump
+from src.args import get_parser
 import sys
 
 
 T = TypeVar("T")
 
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument(
-    "--machine-penalty",
-    type=float,
-    default=1000.0,
-    help="objective penalty per machine built",
-)
-parser.add_argument(
-    "--extra-docs", 
-    type=str, 
-    action="append", 
-    default=[],
-    help="Additional Docs-like JSON files to overlay (same schema as Docs.json)"
-)
-parser.add_argument(
-    "--conveyor-penalty",
-    type=float,
-    default=0.0,
-    help="objective penalty per conveyor belt of machine input/output",
-)
-parser.add_argument(
-    "--building-multiplier",
-    type=float,
-    default=1.0,
-    help="global speed multiplier for ALL manufacturers (throughput and per-machine power scale linearly)",
-)
-parser.add_argument(
-    "--pipeline-penalty",
-    type=float,
-    default=0.0,
-    help="objective penalty per pipeline of machine input/output",
-)
-parser.add_argument(
-    "--machine-limit",
-    type=float,
-    help="hard limit on number of machines built",
-)
-parser.add_argument(
-    "--transport-power-cost",
-    type=float,
-    default=0.0,
-    help="added power cost to simulate transport per conveyor/pipeline of mined resource",
-)
-parser.add_argument(
-    "--drone-battery-cost",
-    type=float,
-    default=0.0,
-    help="added battery cost to simulate drone transport per conveyor/pipeline of mined resource",
-)
-parser.add_argument(
-    "--miner-clocks",
-    type=str,
-    default="2.5",
-    help="clock choices for miners (excluding Water Extractors)",
-)
-parser.add_argument(
-    "--manufacturer-clocks",
-    type=str,
-    default="0-2.5/0.05",
-    help="clock choices for non-somerslooped manufacturers (plus Water Extractors)",
-)
-parser.add_argument(
-    "--somersloop-clocks",
-    type=str,
-    default="2.5",
-    help="clock choices for somerslooped manufacturers",
-)
-parser.add_argument(
-    "--generator-clocks",
-    type=str,
-    default="2.5",
-    help="clock choices for power generators",
-)
-parser.add_argument(
-    "--num-alien-power-augmenters",
-    type=int,
-    default=0,
-    help="number of Alien Power Augmenters to build",
-)
-parser.add_argument(
-    "--num-fueled-alien-power-augmenters",
-    type=float,
-    default=0,
-    help="number of Alien Power Augmenters to fuel with Alien Power Matrix",
-)
-parser.add_argument(
-    "--disable-production-amplification",
-    action="store_true",
-    help="disable usage of somersloops in manufacturers",
-)
-parser.add_argument(
-    "--resource-multipliers",
-    type=str,
-    default="",
-    help="comma-separated list of item_class:multiplier to scale resource node availability; supports All:<x> as a default",
-)
-parser.add_argument(
-    "--num-somersloops-available",
-    type=int,
-    help="override number of somersloops available for production and APAs",
-)
-parser.add_argument(
-    "--disabled-recipes",
-    type=str,
-    default="",
-    help="comma-separated list of recipe_class to disable",
-)
-parser.add_argument(
-    "--infinite-power",
-    action="store_true",
-    help="allow free infinite power consumption",
-)
-parser.add_argument(
-    "--allow-waste",
-    action="store_true",
-    help="allow accumulation of nuclear waste and other unsinkable items",
-)
-parser.add_argument(
-    "--show-unused",
-    action="store_true",
-    help="show unused LP columns (coeff 0) in the optimization result",
-)
-parser.add_argument(
-    "--dump-debug-info",
-    action="store_true",
-    help="dump debug info to DebugInfo.txt (items, recipes, LP matrix, etc.)",
-)
-parser.add_argument(
-    "--xlsx-report",
-    type=str,
-    default="Report",
-    help="path to xlsx report output (empty string to disable)",
-)
-parser.add_argument(
-    "--xlsx-sheet-suffix",
-    type=str,
-    default="",
-    help="suffix to add to xlsx sheet names",
-)
+parser = get_parser()
 args = parser.parse_args()
 
 
@@ -171,46 +36,14 @@ def float_to_clock(value: float) -> Fraction:
 
 ### Debug ###
 
+dbug = Debugger()
 
-DEBUG_INFO_PATH = r"DebugInfo.txt"
-PPRINT_WIDTH = 120
-
-debug_file = (
-    open(DEBUG_INFO_PATH, mode="w", encoding="utf-8") if args.dump_debug_info else None
-)
+if (args.dump_debug_info):
+    dbug.init()
 
 
-def debug_dump(heading: str, obj: object):
-    if debug_file is None:
-        return
-    print(f"========== {heading} ==========", file=debug_file)
-    print("", file=debug_file)
-    if isinstance(obj, str):
-        print(obj, file=debug_file)
-    else:
-        pprint(obj, stream=debug_file, width=PPRINT_WIDTH, sort_dicts=False)
-    print("", file=debug_file)
 
-def _norm_for_xlsx(v):
-    # Accept numbers/strings cleanly
-    if isinstance(v, (int, float, str)) or v is None:
-        return v
-    # Numpy scalars
-    if isinstance(v, (np.integer, np.floating)):
-        return float(v)
-    # Lists/tuples/sets: join nicely
-    if isinstance(v, (list, tuple, set)):
-        return ", ".join(_stringify(x) for x in v)
-    # Dicts: JSON so humans can read it in the cell
-    if isinstance(v, dict):
-        return json.dumps(v, ensure_ascii=False, separators=(",", ":"))
-    # Everything else: string fallback
-    return str(v)
 
-def _stringify(x):
-    if isinstance(x, (np.integer, np.floating)):
-        return str(float(x))
-    return str(x)
 ### Configured clock speeds ###
 
 
@@ -240,8 +73,10 @@ MANUFACTURER_CLOCKS = parse_clock_spec(args.manufacturer_clocks)
 SOMERSLOOP_CLOCKS = parse_clock_spec(args.somersloop_clocks)
 GENERATOR_CLOCKS = parse_clock_spec(args.generator_clocks)
 
-debug_dump(
+dbug.debug_dump(
+    heading=
     "Configured clock speeds",
+    obj=
     f"""
 {MINER_CLOCKS=}
 {MANUFACTURER_CLOCKS=}
@@ -267,7 +102,7 @@ def parse_resource_multipliers(s: str) -> dict[str, float]:
 
 RESOURCE_MULTIPLIERS = parse_resource_multipliers(args.resource_multipliers)
 
-debug_dump(
+dbug.debug_dump(
     "Configured resource multipliers",
     f"""
 {RESOURCE_MULTIPLIERS=}
@@ -281,7 +116,7 @@ DISABLED_RECIPES: list[str] = [
     token.strip() for token in args.disabled_recipes.split(",")
 ]
 
-debug_dump(
+dbug.debug_dump(
     "Configured disabled recipes",
     f"""
 {DISABLED_RECIPES=}
@@ -386,7 +221,7 @@ CONVEYOR_BELT_LIMIT = 0.5 * float(class_name_to_entry[CONVEYOR_BELT_CLASS]["mSpe
 PIPELINE_LIMIT = 60000.0 * float(class_name_to_entry[PIPELINE_CLASS]["mFlowLimit"])
 SINK_POWER_CONSUMPTION = float(class_name_to_entry[SINK_CLASS]["mPowerConsumption"])
 
-debug_dump(
+dbug.debug_dump(
     "Misc constants",
     f"""
 {CONVEYOR_BELT_LIMIT=}
@@ -411,7 +246,7 @@ ALIEN_POWER_AUGMENTER_FUEL_INPUT_RATE = 60.0 / float(
 )
 
 
-debug_dump(
+dbug.debug_dump(
     "Alien Power Augmenter constants",
     f"""
 {ALIEN_POWER_AUGMENTER_STATIC_POWER=}
@@ -475,7 +310,7 @@ miners: dict[str, Miner] = {}
 for class_name in ALL_MINER_CLASSES:
     miners[class_name] = parse_miner(class_name_to_entry[class_name])
 
-debug_dump("Parsed miners", miners)
+dbug.debug_dump("Parsed miners", miners)
 
 
 ### Manufacturers ###
@@ -526,7 +361,7 @@ for entry in native_class_to_class_entries["FGBuildableManufacturerVariablePower
     manufacturer = parse_manufacturer(entry, is_variable_power=True)
     manufacturers[manufacturer.class_name] = manufacturer
 
-debug_dump("Parsed manufacturers", manufacturers)
+dbug.debug_dump("Parsed manufacturers", manufacturers)
 
 
 ### Recipes ###
@@ -583,7 +418,7 @@ for entry in native_class_to_class_entries["FGRecipe"]:
         recipes[recipe.class_name] = recipe
 
 
-debug_dump("Parsed recipes", recipes)
+dbug.debug_dump("Parsed recipes", recipes)
 
 
 ### Items ###
@@ -608,7 +443,7 @@ for native_class in ALL_ITEM_NATIVE_CLASSES:
         item = parse_item(entry)
         items[item.class_name] = item
 
-debug_dump("Parsed items", items)
+dbug.debug_dump("Parsed items", items)
 
 
 ### Generators ###
@@ -672,8 +507,8 @@ geothermal_generator = parse_geothermal_generator(
     class_name_to_entry[GEOTHERMAL_GENERATOR_CLASS]
 )
 
-debug_dump("Parsed generators", generators)
-debug_dump("Parsed geothermal generator", geothermal_generator)
+dbug.debug_dump("Parsed generators", generators)
+dbug.debug_dump("Parsed geothermal generator", geothermal_generator)
 
 
 ### Map info ###
@@ -794,8 +629,8 @@ resources[f"{WATER_CLASS}|extractor"] = Resource(
     num_satellites=0,
 )
 
-debug_dump("Parsed resources", resources)
-debug_dump("Parsed geysers", geysers)
+dbug.debug_dump("Parsed resources", resources)
+dbug.debug_dump("Parsed geysers", geysers)
 
 
 ### Somersloops ###
@@ -873,7 +708,7 @@ TOTAL_ALIEN_POWER_MATRIX_COST: float = (
     ALIEN_POWER_AUGMENTER_FUEL_INPUT_RATE * args.num_fueled_alien_power_augmenters
 )
 
-debug_dump(
+dbug.debug_dump(
     "Somersloops",
     f"""
 {args.disable_production_amplification=}
@@ -1023,19 +858,7 @@ def get_item_display_name(item_class: str) -> str:
 ### LP setup ###
 
 
-@dataclass
-class LPColumn:
-    coeffs: dict[str, float]
-    type_: str
-    name: str
-    display_name: str
-    full_display_name: str
-    machine_name: str | None
-    resource_subtype: str | None
-    clock: Fraction | None
-    somersloops: int | None
-    objective_weight: float | None
-    requires_integrality: bool
+
 
 
 lp_columns: dict[str, LPColumn] = {}
@@ -1489,9 +1312,9 @@ add_lp_column(
 lp_equalities["somersloop_usage"] = 0.0
 lp_lower_bounds["somersloop"] = -NUM_SOMERSLOOPS_AVAILABLE_FOR_PRODUCTION
 
-# debug_dump("LP columns (before pruning)", lp_columns)
-# debug_dump("LP equalities (before pruning)", lp_equalities)
-# debug_dump("LP lower bounds (before pruning)", lp_lower_bounds)
+# dbug.debug_dump("LP columns (before pruning)", lp_columns)
+# dbug.debug_dump("LP equalities (before pruning)", lp_equalities)
+# dbug.debug_dump("LP lower bounds (before pruning)", lp_lower_bounds)
 
 
 def get_all_variables() -> set[str]:
@@ -1518,7 +1341,7 @@ def get_all_variables() -> set[str]:
 
 lp_variables = get_all_variables()
 
-# debug_dump("LP variables (before pruning)", lp_variables)
+# dbug.debug_dump("LP variables (before pruning)", lp_variables)
 
 
 ### Pruning unreachable items ###
@@ -1547,7 +1370,7 @@ unreachable_items = (
     set(v for v in lp_variables if v.startswith("item|")) - reachable_items
 )
 
-debug_dump("Unreachable items to be pruned", unreachable_items)
+dbug.debug_dump("Unreachable items to be pruned", unreachable_items)
 
 columns_to_prune: list[str] = []
 for column_id, column in lp_columns.items():
@@ -1562,13 +1385,13 @@ for item_var in unreachable_items:
         del lp_equalities[item_var]
 
 
-debug_dump("LP columns (after pruning)", lp_columns)
-debug_dump("LP equalities (after pruning)", lp_equalities)
-debug_dump("LP lower bounds (after pruning)", lp_lower_bounds)
+dbug.debug_dump("LP columns (after pruning)", lp_columns)
+dbug.debug_dump("LP equalities (after pruning)", lp_equalities)
+dbug.debug_dump("LP lower bounds (after pruning)", lp_lower_bounds)
 
 lp_variables = get_all_variables()
 
-debug_dump("LP variables (after pruning)", lp_variables)
+dbug.debug_dump("LP variables (after pruning)", lp_variables)
 
 
 ### LP run ###
@@ -1690,23 +1513,7 @@ if not args.show_unused:
     column_results = list(filter(lambda x: abs(x[2]) > REPORT_EPSILON, column_results))
 
 
-@dataclass
-class BudgetEntry:
-    desc: str
-    count: float
-    rate: float
-    share: float
 
-
-@dataclass
-class VariableBreakdown:
-    type_: str
-    display_name: str
-    sort_key: Any
-    production: list[BudgetEntry]
-    consumption: list[BudgetEntry]
-    initial: float | None
-    final: float | None
 
 
 variable_type_order = to_index_map(
@@ -1818,166 +1625,11 @@ sorted_variable_breakdowns = sorted(
 )
 
 if args.xlsx_report:
-    print("Writing xlsx report")
+    writer = XlxsDump()
+    writer.define(
+        column_results=column_results,
+        lp_objective=lp_objective,
+        sorted_variable_breakdowns=sorted_variable_breakdowns
+                  )
+    writer.dump(args)
 
-    import xlsxwriter
-
-    workbook = xlsxwriter.Workbook(f'reports/{args.xlsx_report}-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.xlsx', 
-                                   {"nan_inf_to_errors": True})
-
-    default_format = workbook.add_format({"align": "center"})
-    top_format = workbook.add_format({"align": "center", "top": True})
-    bold_format = workbook.add_format({"align": "center", "bold": True})
-    bold_underline_format = workbook.add_format(
-        {"align": "center", "bold": True, "underline": True}
-    )
-    bold_top_format = workbook.add_format(
-        {"align": "center", "bold": True, "top": True}
-    )
-    bold_underline_top_format = workbook.add_format(
-        {"align": "center", "bold": True, "underline": True, "top": True}
-    )
-    percent_format = workbook.add_format({"align": "center", "num_format": "0.0#####%"})
-
-    sheet_breakdown = workbook.add_worksheet("Breakdown" + args.xlsx_sheet_suffix)
-    sheet_list = workbook.add_worksheet("List" + args.xlsx_sheet_suffix)
-    sheet_config = workbook.add_worksheet("Config" + args.xlsx_sheet_suffix)
-
-    def write_cell(sheet, row, col, value, fmt=None):
-        value = _norm_for_xlsx(value)
-        if fmt is None:
-            sheet.write(row, col, value)
-        else:
-            sheet.write(row, col, value, fmt)
-
-
-    sheet_list.add_table(
-        0,
-        0,
-        len(column_results),
-        6,
-        {
-            "columns": [
-                {"header": header, "header_format": bold_format}
-                for header in [
-                    "Type",
-                    "Name",
-                    "Machine",
-                    "Subtype",
-                    "Clock",
-                    "Somersloops",
-                    "Quantity",
-                ]
-            ],
-            "style": "Table Style Light 16",
-        },
-    )
-
-    write_cell(sheet_list, 1, 0, "objective")
-    write_cell(sheet_list, 1, 1, "objective")
-    write_cell(sheet_list, 1, 6, lp_objective)
-
-    for i, (column_id, column, column_coeff) in enumerate(column_results):
-        write_cell(sheet_list, 2 + i, 0, column.type_)
-        write_cell(sheet_list, 2 + i, 1, column.display_name)
-        write_cell(sheet_list, 2 + i, 2, column.machine_name)
-        write_cell(sheet_list, 2 + i, 3, column.resource_subtype)
-        write_cell(sheet_list, 2 + i, 4, column.clock, fmt=percent_format)
-        write_cell(sheet_list, 2 + i, 5, column.somersloops)
-        write_cell(sheet_list, 2 + i, 6, column_coeff)
-
-    for c, width in enumerate([19, 39, 25, 19, 11, 17, 13]):
-        sheet_list.set_column(c, c, width)
-
-    current_row = 0
-    max_budget_entries = 0
-    budget_rows = [
-        ("desc", "Producer", "Consumer"),
-        ("count", "Producer Count", "Consumer Count"),
-        ("rate", "Production Rate", "Consumption Rate"),
-        ("share", "Production Share", "Consumption Share"),
-    ]
-
-    production_share_cf = {
-        "type": "2_color_scale",
-        "min_type": "num",
-        "max_type": "num",
-        "min_value": 0,
-        "max_value": 1,
-        "min_color": "#FFFFFF",
-        "max_color": "#99FF99",
-    }
-    consumption_share_cf = production_share_cf.copy()
-    consumption_share_cf["max_color"] = "#FFCC66"
-
-    for variable_index, breakdown in enumerate(sorted_variable_breakdowns):
-        for budget_side_index, budget_side_name, budget_side in (
-            (0, "production", breakdown.production),
-            (1, "consumption", breakdown.consumption),
-        ):
-            if not budget_side:
-                continue
-            for budget_row in budget_rows:
-                key = budget_row[0]
-                name = budget_row[budget_side_index + 1]
-                if key == "desc":
-                    fmts = (bold_top_format, bold_underline_top_format)
-                elif key == "share":
-                    fmts = (bold_format, percent_format)
-                else:
-                    fmts = (bold_format, default_format)
-                write_cell(
-                    sheet_breakdown, current_row, 0, breakdown.display_name, fmt=fmts[0]
-                )
-                write_cell(sheet_breakdown, current_row, 1, name, fmt=fmts[0])
-                for i, entry in enumerate(budget_side):
-                    value = getattr(entry, key)
-                    write_cell(sheet_breakdown, current_row, 2 + i, value, fmt=fmts[1])
-                if key == "share":
-                    cf = (
-                        production_share_cf
-                        if budget_side_name == "production"
-                        else consumption_share_cf
-                    )
-                    sheet_breakdown.conditional_format(
-                        current_row, 3, current_row, len(budget_side) + 1, cf
-                    )
-                max_budget_entries = max(max_budget_entries, len(budget_side))
-                current_row += 1
-
-        for initial_or_final, initial_or_final_value in (
-            ("initial", breakdown.initial),
-            ("final", breakdown.final),
-        ):
-            if initial_or_final_value is None:
-                continue
-            if initial_or_final == "initial":
-                fmts = (bold_top_format, top_format)
-            else:
-                fmts = (bold_format, default_format)
-            write_cell(
-                sheet_breakdown, current_row, 0, breakdown.display_name, fmt=fmts[0]
-            )
-            write_cell(
-                sheet_breakdown,
-                current_row,
-                1,
-                initial_or_final.capitalize(),
-                fmt=fmts[0],
-            )
-            write_cell(
-                sheet_breakdown, current_row, 2, initial_or_final_value, fmt=fmts[1]
-            )
-            current_row += 1
-
-    for c, width in enumerate([41, 19, 13] + [59] * (max_budget_entries - 1)):
-        sheet_breakdown.set_column(c, c, width)
-
-    for i, (arg_name, arg_value) in enumerate(vars(args).items()):
-        write_cell(sheet_config, i, 0, arg_name)
-        write_cell(sheet_config, i, 1, arg_value)
-
-    for c, width in enumerate([36, 19]):
-        sheet_config.set_column(c, c, width)
-
-    workbook.close()
