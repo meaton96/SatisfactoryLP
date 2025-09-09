@@ -221,9 +221,9 @@ class SetupLP:
         self._dbug.debug_dump("LP lower bounds (after pruning)", self.config.lp_lower_bounds)
 
         lp_variables = get_all_variables(
-            self.config.lp_columns, 
-            self.config.lp_equalities, 
-            self.config.lp_lower_bounds)
+            self.config.lp_columns, self.config.lp_equalities, self.config.lp_lower_bounds
+        )
+        self.result.lp_variables = lp_variables
 
         self._dbug.debug_dump("LP variables (after pruning)", lp_variables)
 

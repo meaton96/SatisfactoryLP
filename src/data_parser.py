@@ -65,7 +65,7 @@ class DataParser:
     def get_conveyance_limit_clock(self,item: Item, rate: float) -> Fraction:
         conveyance_limit = self.get_form_conveyance_limit(item.form)
         a = float_to_clock(conveyance_limit / rate)
-        print(f"get conveyance limit: {item.display_name} : {item.form} : {conveyance_limit} : {a}")
+        #print(f"get conveyance limit: {item.display_name} : {item.form} : {conveyance_limit} : {a}")
         return a
 
 

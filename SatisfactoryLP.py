@@ -161,7 +161,7 @@ def finalize_variable_budget_side(budget_side: list[BudgetEntry]):
 
 lp_Ax = lp_A @ lp_result.x
 
-pprint(lp_variable_indices)
+#pprint(lp_variable_indices)
 
 for variable, breakdown in variable_breakdowns.items():
     # don't show offsetting dummy items in the breakdown (e.g. "objective|points" as consumer of points)
