@@ -1,4 +1,4 @@
 goal points no bugs: 965744563.
 
 command: 
-python3 SatisfactoryLP.py --manufacturer-clocks 1-2.5/0.5 --building-multiplier 5 --resource-multipliers All:3.0 --extra-docs quant-modded-docs.json
+python3 SatisfactoryLP.py --manufacturer-clocks 1-2.5/0.5 --building-multiplier 5 --resource-multipliers All:3.0 --extra-docs src/data/quant-modded-docs-utf16.json

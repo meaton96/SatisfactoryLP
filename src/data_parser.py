@@ -26,13 +26,21 @@ class DataParser:
 
     
 
-    def init(self, args, debug):
+    def init(self, args, debug, extra_docs_data: str | dict | None = None):
         self.args = args
         self.dbug = debug
         self.data = Data()
         self.constants = Consts()
         with open(DOCS_PATH, "r", encoding="utf-16") as f:
             self.docs_raw = json.load(f)
+        
+        if extra_docs_data:
+            if isinstance(extra_docs_data, str):
+                extra_docs = json.loads(extra_docs_data)
+            else:
+                extra_docs = extra_docs_data
+            self.docs_raw.extend(extra_docs)
+
         self.parse()
 
         
@@ -124,25 +132,49 @@ class DataParser:
             assert m is not None, fg_entry["NativeClass"]
             native_class = m.group(1)
 
-            class_entries: list[dict[str, Any]] = []
-            for class_entry in fg_entry["Classes"]:
-                class_name = class_entry["ClassName"]
-                if not merge and class_name in class_name_to_entry:
-                    print(f"WARNING: ignoring duplicate class {class_name}")
-                else:
+            if merge and native_class in native_class_to_class_entries:
+                # Merge with existing entries
+                existing_class_entries = native_class_to_class_entries[native_class]
+                existing_class_map = {
+                    entry["ClassName"]: entry for entry in existing_class_entries
+                }
+                for class_entry in fg_entry["Classes"]:
+                    class_name = class_entry["ClassName"]
                     class_name_to_entry[class_name] = class_entry
-                    class_entries.append(class_entry)
-            native_class_to_class_entries[native_class] = class_entries
+                    if class_name in existing_class_map:
+                        # Overwrite existing class entry
+                        for i, entry in enumerate(existing_class_entries):
+                            if entry["ClassName"] == class_name:
+                                existing_class_entries[i] = class_entry
+                                break
+                    else:
+                        # Add new class entry
+                        existing_class_entries.append(class_entry)
+            else:
+                # Add new native class entry
+                class_entries: list[dict[str, Any]] = []
+                for class_entry in fg_entry["Classes"]:
+                    class_name = class_entry["ClassName"]
+                    if not merge and class_name in class_name_to_entry:
+                        print(f"WARNING: ignoring duplicate class {class_name}")
+                    else:
+                        class_name_to_entry[class_name] = class_entry
+                        class_entries.append(class_entry)
+                native_class_to_class_entries[native_class] = class_entries
 
         for fg_entry in self.docs_raw:
             parse_and_add_fg_entry(fg_entry)
 
         def parse_modded_docs():
+            if not self.args.extra_docs:
+                return
             for p in self.args.extra_docs:
                 with open(p, "r", encoding="utf-16") as f:
                     extra_raw = json.load(f)
                 for fg_entry in extra_raw:
-                    parse_and_add_fg_entry(fg_entry, merge=True)  
+                    parse_and_add_fg_entry(fg_entry, merge=True)
+        
+        parse_modded_docs()  
 
         self.constants.CONVEYOR_BELT_LIMIT = 0.5 * float(class_name_to_entry[CONVEYOR_BELT_CLASS]["mSpeed"])
         self.constants.PIPELINE_LIMIT = 60000.0 * float(class_name_to_entry[PIPELINE_CLASS]["mFlowLimit"])
@@ -322,8 +354,8 @@ class DataParser:
                     for (item, amount) in find_item_amounts(entry[key], self.constants)
                 ]
 
-            vpc_constant = float(entry["mVariablePowerConsumptionConstant"])
-            vpc_factor = float(entry["mVariablePowerConsumptionFactor"])
+            vpc_constant = float(entry.get("mVariablePowerConsumptionConstant", 0.0))
+            vpc_factor = float(entry.get("mVariablePowerConsumptionFactor", 0.0))
             # Assuming the mean is exactly halfway for all of the variable power machine types.
             # This appears to be accurate but it's hard to confirm exactly.
             mean_variable_power_consumption = vpc_constant + 0.5 * vpc_factor
