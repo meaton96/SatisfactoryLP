@@ -57,7 +57,7 @@ class LPRunner:
         }
 
     def format_csv(self, column_results, result_obj):
-        
+        from src.config import FLUID_CLASSES
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
@@ -70,7 +70,14 @@ class LPRunner:
                 continue
             num_machines = column_coeff
             machine_name = column.machine_name or ""
-            clock_mult = column.clock if column.clock is not None else "1.0"
+            # Format clock multiplier as decimal to 2 places
+            if column.clock is not None:
+                try:
+                    clock_mult = f"{float(column.clock):.2f}"
+                except Exception:
+                    clock_mult = str(column.clock)
+            else:
+                clock_mult = "1.00"
             display_name = column.display_name or ""
             for item_class, rate in column.coeffs.items():
                 if not item_class.startswith("item|"):
@@ -78,14 +85,15 @@ class LPRunner:
                 direction = "input" if rate < 0 else "output"
                 abs_rate = abs(rate * num_machines)
                 item_short = item_class[5:]
-                # Determine fluid status
                 is_fluid = "yes" if any(fluid in item_short for fluid in FLUID_CLASSES) else "no"
-                # Belt/Pipe calculation
+                # Adjust fluid rates by dividing by 1000 if needed
                 if is_fluid == "yes":
+                    abs_rate_adj = abs_rate / 1000.0
                     belt_count = "NA"
-                    pipe_count = f"{abs_rate / PIPE_RATE:.2f}"
+                    pipe_count = f"{np.ceil(abs_rate_adj / PIPE_RATE):.2f}"
                 else:
-                    belt_count = f"{abs_rate / BELT_RATE:.2f}"
+                    abs_rate_adj = abs_rate
+                    belt_count = f"{np.ceil(abs_rate_adj / BELT_RATE):.2f}"
                     pipe_count = "NA"
                 writer.writerow([
                     column.display_name,
@@ -95,7 +103,7 @@ class LPRunner:
                     f"{num_machines:.2f}",
                     direction,
                     item_short,
-                    f"{abs_rate:.2f}",
+                    f"{abs_rate_adj:.2f}",
                     is_fluid,
                     belt_count,
                     pipe_count
