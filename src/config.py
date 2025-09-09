@@ -14,6 +14,23 @@ STACK_SIZES = {
     "SS_ONE": 1,
     "SS_FLUID": 50000,
 }
+FLUID_CLASSES = [
+    "Desc_Water",
+    "Desc_LiquidTurboFuel",
+    "Desc_LiquidFuel",
+    "Desc_LiquidBiofuel",
+    "Desc_LiquidOil",
+    "Desc_NitrogenGas",
+    "Desc_RocketFuel",
+    "Desc_NitricAcid",
+    "Desc_HeavyOilResidue",
+    "Desc_AluminaSolution",
+    "Desc_SulfuricAcid",
+    "Desc_IonizedFuel",
+    "Desc_QuantumEnergy",
+    "Desc_DarkEnergy"
+
+]
 
 # Clock speeds
 INVERSE_CLOCK_GRANULARITY = 100 * 10000

@@ -3,10 +3,11 @@ from src.utils import *
 from src.config import *
 from src.models import  *
 from src.debug import Debugger
-from src.xlsx_dump import XlxsDump
 from src.data_parser import DataParser
 from src.lp_utils import *
 from src.setup_lp import SetupLP
+import csv
+import io
 
 
 class LPRunner:
@@ -34,18 +35,16 @@ class LPRunner:
             }
 
         result_obj = response['result']
-        
-        # Process results
         column_results, variable_breakdowns, lp_objective = self.process_results(result_obj)
 
-        if self.args.xlsx_report:
-            writer = XlxsDump()
-            writer.define(
-                column_results=column_results,
-                lp_objective=lp_objective,
-                sorted_variable_breakdowns=sorted(variable_breakdowns.values(), key=lambda bd: bd.sort_key)
-            )
-            writer.dump(self.args)
+        if getattr(self.args, 'output_fmt', None) == 'csv':
+            csv_str = self.format_csv(column_results, result_obj)
+            return {
+                "status": "success",
+                "data": csv_str
+            }
+
+        
 
         return {
             "status": "success",
@@ -56,6 +55,52 @@ class LPRunner:
                 "lp_objective": lp_objective
             }
         }
+
+    def format_csv(self, column_results, result_obj):
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "recipe_name", "display_name", "machine_name", "clock_multiplier", "num_machines", "direction", "item_class", "rate", "is_fluid", "belt_count", "pipe_count"
+        ])
+        BELT_RATE = 1200.0
+        PIPE_RATE = 600.0
+        for column_id, column, column_coeff in column_results:
+            if column.type_ != "manufacturer":
+                continue
+            num_machines = column_coeff
+            machine_name = column.machine_name or ""
+            clock_mult = column.clock if column.clock is not None else "1.0"
+            display_name = column.display_name or ""
+            for item_class, rate in column.coeffs.items():
+                if not item_class.startswith("item|"):
+                    continue
+                direction = "input" if rate < 0 else "output"
+                abs_rate = abs(rate * num_machines)
+                item_short = item_class[5:]
+                # Determine fluid status
+                is_fluid = "yes" if any(fluid in item_short for fluid in FLUID_CLASSES) else "no"
+                # Belt/Pipe calculation
+                if is_fluid == "yes":
+                    belt_count = "NA"
+                    pipe_count = f"{abs_rate / PIPE_RATE:.2f}"
+                else:
+                    belt_count = f"{abs_rate / BELT_RATE:.2f}"
+                    pipe_count = "NA"
+                writer.writerow([
+                    column.display_name,
+                    display_name,
+                    machine_name,
+                    clock_mult,
+                    f"{num_machines:.2f}",
+                    direction,
+                    item_short,
+                    f"{abs_rate:.2f}",
+                    is_fluid,
+                    belt_count,
+                    pipe_count
+                ])
+        return output.getvalue()
 
     def process_results(self, result_obj):
         REPORT_EPSILON = 1e-7

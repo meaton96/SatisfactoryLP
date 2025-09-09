@@ -3,6 +3,12 @@ import argparse
 def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
+        "--output-fmt",
+        type=str,
+        default="",
+        help="output format if something other than default summary print (csv, json) Not compatible with --xlsx-report",
+    )
+    parser.add_argument(
         "--machine-penalty",
         type=float,
         default=1000.0,
@@ -131,7 +137,7 @@ def get_parser():
     parser.add_argument(
         "--xlsx-report",
         type=str,
-        default="Report",
+        default="",
         help="path to xlsx report output (empty string to disable)",
     )
     parser.add_argument(
